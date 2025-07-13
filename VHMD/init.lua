@@ -12,11 +12,13 @@ if not modules.hasModule("plethora:glasses") then error("Must have overlay glass
 
 _G.VHMD = {}
 VHMD.modules = modules
+_G.shell = shell
 local meta = modules.getMetaOwner()
 local canvas = modules.canvas()
 local menuOpen = false
+VHMD.isMenuOpen = menuOpen
+VHMD.getMeta = meta
 local screenWidth,screenHight=canvas.getSize()
-local airborneCount = 0
 local menuPointer=1
 local quit=false
 local menu = {}
@@ -30,20 +32,6 @@ end
 
 VHMD.canvasObject = canvas
 
-local function noFall()
-    while true do
-        if meta.isAirborne then
-            airborneCount=airborneCount+1
-        else
-            airborneCount=0
-        end
-        if airborneCount > 10 then
-            modules.launch(0,-90,.001)
-        end
-        sleep()
-    end
-end
-
 local heldCtrl,heldAlt,heldShift=false,false,false
 
 local function events()
@@ -52,10 +40,13 @@ local function events()
         if event == "key" then
             if key == keys.leftCtrl or key == keys.rightCtrl then 
                 heldCtrl = true
+                VHMD.heldCtrl=true
             elseif key == keys.leftAlt or key == keys.rightAlt then 
                 heldAlt = true
+                VHMD.heldAlt=true
             elseif key == keys.leftShift or key == keys.rightShift then 
                 heldShift = true 
+                VHMD.heldShift=true
             elseif key == keys.m then
                 if menuOpen then
                     menuOpen=false
@@ -91,10 +82,13 @@ local function events()
         elseif event == "key_up" then
             if key == keys.leftCtrl or key == keys.rightCtrl then 
                 heldCtrl = false
+                VHMD.heldCtrl=false
             elseif key == keys.leftAlt or key == keys.rightAlt then 
                 heldAlt = false
+                VHMD.heldAlt=false
             elseif key == keys.leftShift or key == keys.rightShift then 
                 heldShift = false 
+                VHMD.heldShift=false
             end
         end
     end
@@ -180,7 +174,7 @@ for _,v in ipairs(fs.list("VHMD/modules/")) do
     end
 end
 
-parallel.waitForAny(noFall,events,updateMeta,draw,tick,table.unpack(rootFuncs))
+parallel.waitForAny(events,updateMeta,draw,tick,table.unpack(rootFuncs))
 sleep()
 if quit then
     break

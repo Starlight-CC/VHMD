@@ -1,0 +1,14 @@
+local airborneCount=0
+VHMD.addRootFunction(function()
+    while true do
+        if VHMD.getMeta.isAirborne then
+            airborneCount=airborneCount+1
+        else
+            airborneCount=0
+        end
+        if airborneCount > 10 then
+            VHMD.modules.launch(0,-90,.001)
+        end
+        sleep()
+    end
+end)
