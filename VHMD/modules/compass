@@ -1,0 +1,31 @@
+local canvas = VHMD.canvasObject
+local compass = true
+local char = 0
+local x,y = canvas.getSize()
+local yaw = 0
+x,y=x/2,y/2
+VHMD.addDrawCommand(function()
+    if compass then
+        if char == 1 then
+            canvas.addText({x-5,0},tostring(yaw))
+        elseif char == 2 then
+            canvas.addText({x-10,0},tostring(yaw))
+        elseif char == 3 then
+            canvas.addText({x-15,0},tostring(yaw))
+        elseif char == 4 then
+            canvas.addText({x-20,0},tostring(yaw))
+        end
+    end
+end)
+VHMD.addTickFunction(function()
+    local meta = VHMD.getMeta
+    yaw = math.floor(meta.yaw+180)
+    char = #tostring(yaw)
+end)
+VHMD.addMenuElement("Toggle compass",function()
+    if compass then
+        compass=false
+    else
+        compass=true
+    end
+end)

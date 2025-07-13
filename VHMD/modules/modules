@@ -1,0 +1,63 @@
+local showMenu = false
+local x,y = VHMD.canvasObject.getSize()
+local x,y=x/2,y/2
+local text = ""
+VHMD.addMenuElement("Add module",function()
+    if showMenu then
+        showMenu=false
+    else
+        showMenu=true
+    end
+end)
+VHMD.addDrawCommand(function()
+    if showMenu then
+        VHMD.canvasObject.addRectangle(x-70,y-50,140,100,0xffffff80)
+        VHMD.canvasObject.addRectangle(x-69,y-49,138,9,0xf0f0f0ff)
+        VHMD.canvasObject.addText({x-69,y-49},text,0x000000ff)
+    end
+end)
+local function iskey(val,key)
+    if val == keys[key] then
+        text=text..key
+    end
+end
+VHMD.addRootFunction(function()
+    while true do
+        local event, key = os.pullEvent("key")
+        if showMenu then
+            iskey(key,"a")
+            iskey(key,"b")
+            iskey(key,"c")
+            iskey(key,"d")
+            iskey(key,"e")
+            iskey(key,"f")
+            iskey(key,"g")
+            iskey(key,"h")
+            iskey(key,"i")
+            iskey(key,"j")
+            iskey(key,"k")
+            iskey(key,"l")
+            iskey(key,"m")
+            iskey(key,"n")
+            iskey(key,"o")
+            iskey(key,"p")
+            iskey(key,"q")
+            iskey(key,"r")
+            iskey(key,"s")
+            iskey(key,"t")
+            iskey(key,"u")
+            iskey(key,"v")
+            iskey(key,"w")
+            iskey(key,"x")
+            iskey(key,"y")
+            iskey(key,"z")
+            if key == keys.backspace then
+                text=string.sub(text,1,#text-1)
+            elseif key == keys.period then
+                text=text.."."
+            elseif key == keys.enter then
+                
+            end
+        end
+    end
+end)
