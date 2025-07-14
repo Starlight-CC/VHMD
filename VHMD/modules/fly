@@ -1,0 +1,340 @@
+--[[
+VHMD.addDrawCommand(func)          -- For draw functions with VHMD.canvasObject
+VHMD.addMenuElement(text,func)     -- Adds a menu element
+VHMD.addRootFunction(func)         -- Adds a root function (Cannot terminate and can take os.pullEvent input must yeild)
+VHMD.addTickFunction(func)         -- Adds a tick function runs every tick must terminate
+VHMD.canvasObject                  -- Overlay glasses canvas
+VHMD.getMeta                       -- Get player metadata
+VHMD.heldAlt                       -- ? held alt
+VHMD.heldCtrl                      -- ? held ctrl
+VHMD.heldShift                     -- ? held shift
+VHMD.isMenuOpen                    -- ? is the menu open
+VHMD.modules                       -- nueral interface api
+]]
+_G.enable = false
+
+VHMD.addRootFunction(function()
+    while true do
+        sleep()
+        local func = load([[
+-- shrekflight
+-- Releasd under MIT by ShreksHellraiser
+
+-- This is a script that provides basic creative-like flight and automatic flight to coordinates using plethora.
+-- Requires a keyboard, entity sensor, introspection module, and kinetic module
+
+-- To fly, simply double tap space, hold space to fly up, hold shift to fly down.
+-- You can modify your horizontal and vertical speeds in this with the commands
+-- ^vspeed and ^hspeed
+
+-- This also includes a ^goto command, this accepts a coordinate and will automatically fly you to that location.
+-- This is not *100%* reliable, but as long as you *first* set your position ~200 blocks above the ground and then
+-- set your target to where you want you should be fine.
+-- supports ~ style relative coordinates for your current gps location, and . for your set goto position.
+-- ^toggle will disable/reenable goto, entering fly mode by double tapping will too.
+
+local modules = peripheral.find("neuralInterface")
+if not modules then
+    error("Must have a neural interface", 0)
+end
+
+if not modules.hasModule("plethora:sensor") then error("Must have a sensor", 0) end
+if not modules.hasModule("plethora:introspection") then error("Must have an introspection module", 0) end
+if not modules.hasModule("plethora:kinetic", 0) then error("Must have a kinetic agument", 0) end
+if not modules.hasModule("plethora:glasses") then error("Must have overlay glasses", 0) end
+
+local function start_pid(k_p, k_i, k_d)
+    local e, de, ie = 0, 0, 0
+    ---Process a frame of the PID
+    ---@param dt number frametime
+    ---@param sp number desired setpoint
+    ---@param pv number process variable
+    return function(dt, sp, pv)
+        local ne = sp - pv
+        de = (ne - e) / dt  -- instantaneous derivative
+        ie = ie + (ne * dt) -- summed integral
+        e = ne              -- error
+        return (k_p * e) + (k_i * ie) + (k_d * de)
+    end
+end
+
+local target_coords = { 0, 200, 0 }
+local goto_enable = false
+local hover_enable = false
+
+local function control()
+    -- assert(chatbox.isConnected(), "Chatbox isn't connected!")
+    while true do
+        local event, user, command, args, data = os.pullEvent("command")
+        if data.ownerOnly then
+            --if command == "enable" then
+                --enable = true
+                --sleep(0)
+            --end
+            --if command == "disable" then
+                --enable = false
+                --sleep(0)
+            --end
+        end
+        sleep(0)
+        if enable then
+            local event, user, command, args, data = os.pullEvent("command")
+            if data.ownerOnly then
+                if command == "home" then
+                    target_coords = {-54, 152, 38}
+                    goto_enable = true
+                    hover_enable = true
+                end
+                if command == "goto" then
+                    local x, y, z = gps.locate()
+                    for i = 1, 3 do
+                        if args[i] then
+                            if args[i]:sub(1, 1) == "~" and x and y and z then
+                                -- current coords
+                                local offset = tonumber(args[i]:sub(2, -1)) or 0
+                                print(offset)
+                                target_coords[i] = ((i == 1 and x) or (i == 2 and y) or z) + offset
+                            elseif args[i]:sub(1, 1) == "." then
+                                -- change it
+                                local offset = tonumber(args[i]:sub(2, -1)) or 0
+                                target_coords[i] = target_coords[i] + offset
+                            elseif tonumber(args[i]) then
+                                target_coords[i] = tonumber(args[i])
+                            end
+                        end
+                    end
+                    print(("target %u %u %u"):format(target_coords[1], target_coords[2], target_coords[3]))
+                    goto_enable = true
+                    hover_enable = false
+                elseif command == "toggle" then
+                    hover_enable = hover_enable and goto_enable
+                    goto_enable = not goto_enable
+                end
+            end
+        end
+    end
+end
+
+local function calc_xz_angle(x, z)
+    if enable then
+        local xz_angle = math.atan(math.abs(x / z)) * 180 / math.pi
+        if z == 0 then
+            xz_angle = 90
+        end
+
+        if x > 0 then
+            xz_angle = -xz_angle -- -90 @ +x
+            if z < 0 then
+                -- -180 @ -z
+                xz_angle = -180 - xz_angle
+            end
+        elseif z < 0 then
+            -- +180 @ -z
+            xz_angle = -180 - xz_angle
+        end
+        return xz_angle
+    end
+end
+
+local function calc_yxz_angle(y, xz)
+    if enable then
+        local yxz_angle = -math.atan(math.abs(y / xz)) * 180 / math.pi
+        if xz == 0 then
+            yxz_angle = -90
+        end
+
+        -- hard coded boost to emphasize upward vertical movement
+        -- if y > 2 and yxz_angle < 10 then
+        --     yxz_angle = 20
+        -- end
+        if y < 0 then
+            yxz_angle = -yxz_angle
+        end
+        return yxz_angle
+    end
+end
+
+local function p_pid()
+    if enable then
+        local y_pid = start_pid(0.05, 0.005, 0.06)
+        local x_pid = start_pid(0.1, 0, 0)
+        local z_pid = start_pid(0.1, 0, 0)
+        local t0 = os.epoch("utc")
+        sleep()
+        while true do
+            sleep(0.2)
+            if goto_enable  then
+                local x, y, z = gps.locate()
+                if x and y and z and x == x and y == y and z == z then
+                    local t = os.epoch("utc")
+                    local dt = (t - t0) / 1000
+                    local y_impulse = y_pid(dt, target_coords[2], y)
+                    local x_impulse = x_pid(dt, target_coords[1], x)
+                    local z_impulse = z_pid(dt, target_coords[3], z)
+                    local x_vec = vector.new(x_impulse, 0, 0)
+                    local y_vec = vector.new(0, y_impulse, 0)
+                    local z_vec = vector.new(0, 0, z_impulse)
+                    local result = ((x_vec + y_vec + z_vec) / 3)
+
+                    local xz_hyp = math.sqrt(result.x ^ 2 + result.z ^ 2)
+                    local xz_angle = calc_xz_angle(result.x, result.z)
+                    local yxz_angle = calc_yxz_angle(result.y, xz_hyp)
+
+                    modules.launch(xz_angle, yxz_angle, math.min(4, math.abs(result:length())))
+                    t0 = t
+                end
+            end
+        end
+    end
+end
+
+local target_vel = { 0, 0, 0 }
+local y_impulse_scale = 0.82
+local k_p = 4
+local owner = modules.getMetaOwner()
+local function v_pid()
+    local x_pid = start_pid(0.1, 0, 0)
+    local z_pid = start_pid(0.1, 0, 0)
+    local t0 = os.epoch("utc")
+    sleep()
+        while true do
+            if enable then
+            local t = os.epoch("utc")
+            while hover_enable and not goto_enable do
+                t = os.epoch("utc")
+                sleep(0)
+                owner = modules.getMetaOwner()
+                if not owner.isAirborne then
+                    hover_enable = false
+                end
+                local dt = (t - t0) / 1000
+                local ticks = dt / 0.05
+                local x, y, z = owner.motionX, owner.motionY, owner.motionZ
+
+                local y_vel_err = (0.08 * ticks) + target_vel[2] - y
+                -- IMPULSE STRENGTH LINEARLY CORROLATES TO VELOCITY
+                local y_impulse = k_p * y_vel_err / y_impulse_scale
+
+                local x_impulse = x_pid(dt, target_vel[1], x)
+                local z_impulse = z_pid(dt, target_vel[3], z)
+
+                local x_vec = vector.new(x_impulse, 0, 0)
+                local y_vec = vector.new(0, y_impulse, 0)
+                local z_vec = vector.new(0, 0, z_impulse)
+                local result = ((x_vec + y_vec + z_vec) / 3)
+                local xz_hyp = math.sqrt(result.x ^ 2 + result.z ^ 2)
+                local xz_angle = calc_xz_angle(result.x, result.z)
+                local yxz_angle = calc_yxz_angle(result.y, xz_hyp)
+                local power = math.min(4, math.abs(result:length()))
+
+                modules.launch(xz_angle, yxz_angle, power)
+                t0 = t
+            end
+            os.pullEvent("velocity_control")
+        end
+    end
+end
+
+local function wrap_angle(t)
+    if t > 180 then
+        t = -360 + t
+    elseif t < -180 then
+        t = 360 + t
+    end
+    return t
+end
+
+local function rad(deg)
+    return deg / 180 * math.pi
+end
+
+local function deg(rad)
+    return rad * 180 / math.pi
+end
+
+local v_speed = 0.5
+local sprinting_speed = 6
+
+local held_keys = {}
+local function get_v_vectors()
+    local theta = owner.yaw
+    local result = vector.new(0, 0, 0)
+    local forward_power = ((held_keys[keys.w] and 1) or (held_keys[keys.s] and -1) or 0)
+    local sideways_power = ((held_keys[keys.d] and -1) or (held_keys[keys.a] and 1) or 0)
+    local h_power = 3
+    if owner.isSprinting then
+        h_power = sprinting_speed
+    end
+    result.x = result.x + h_power * math.cos(rad(theta)) * sideways_power
+    result.z = result.z + h_power * math.sin(rad(theta)) * sideways_power
+    result.x = result.x + h_power * math.cos(rad(wrap_angle(theta + 90))) * forward_power
+    result.z = result.z + h_power * math.sin(rad(wrap_angle(theta + 90))) * forward_power
+    return result.x, result.z
+end
+
+local function v_control()
+    local space_presses = 0
+    local space_press_timer
+    local t0 = os.epoch("utc")
+    while true do
+        local event, key, command, args, data = os.pullEvent()
+        local t = os.epoch("utc")
+        local dt = (t - t0) / 1000
+        if event == "key" then
+            if key == keys.space or key == keys.h then
+                if not held_keys[keys.space] then
+                    space_presses = space_presses + 1
+                end
+                if space_presses > 1 or key == keys.h then
+                    -- double tapped
+                    hover_enable = not hover_enable
+                    goto_enable = false
+                    print("double tap", hover_enable)
+                    os.queueEvent("velocity_control")
+                    space_presses = 0
+                else
+                    target_vel[2] = v_speed
+                end
+            else
+                space_presses = 0
+            end
+            if key == keys.leftShift then
+                target_vel[2] = -v_speed
+            end
+            held_keys[key] = true
+        elseif event == "key_up" then
+            held_keys[key] = false
+            if key == keys.space or key == keys.leftShift then
+                if space_press_timer then
+                    os.cancelTimer(space_press_timer)
+                end
+                space_press_timer = os.startTimer(0.5)
+                target_vel[2] = 0
+            end
+        elseif event == "timer" and key == space_press_timer then
+            space_presses = 0
+        elseif event == "command" and data.ownerOnly then
+            local speed = tonumber(args[1])
+            if command == "hspeed" and speed then
+                sprinting_speed = speed --[[@as number]]
+            elseif command == "vspeed" and speed then
+                v_speed = speed
+            end
+        end
+        t0 = t
+        target_vel[1], target_vel[3] = get_v_vectors()
+    end
+end
+
+parallel.waitForAny(v_pid, v_control, p_pid, control)
+]])
+        pcall(func)
+    end
+end)
+VHMD.addMenuElement("Fly toggle", function()
+  if enable then
+    enable = false
+  else
+    enable = true
+  end
+end)
