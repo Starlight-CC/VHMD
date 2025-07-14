@@ -8,8 +8,8 @@ VHMD.addMenuElement("Toggle fling",function()
 end)
 VHMD.addRootFunction(function()
     while true do
+        local event,key = os.pullEvent()
         if enable then
-            local event,key = os.pullEvent()
             local meta = VHMD.getMeta
             if event == "key" then
                 if key == keys.space then
@@ -17,6 +17,5 @@ VHMD.addRootFunction(function()
                 end
             end
         end
-        sleep()
     end
 end)
