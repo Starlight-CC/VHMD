@@ -316,7 +316,7 @@ local function v_control()
         elseif event == "command" and data.ownerOnly then
             local speed = tonumber(args[1])
             if command == "hspeed" and speed then
-                sprinting_speed = speed --[[@as number]]
+                sprinting_speed = speed
             elseif command == "vspeed" and speed then
                 v_speed = speed
             end
