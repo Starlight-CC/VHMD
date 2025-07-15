@@ -1,7 +1,7 @@
 local airborneCount=0
 VHMD.addRootFunction(function()
     while true do
-        if VHMD.getMeta.isAirborne then
+        if VHMD.getMeta.isAirborne and not VHMD.getMeta.isAirborne then
             airborneCount=airborneCount+1
         else
             airborneCount=0
